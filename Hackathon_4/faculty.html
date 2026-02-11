@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Faculty Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="dashboard">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h2>Faculty Panel</h2>
+        <ul>
+            <li class="active">Dashboard</li>
+            <li>Semesters</li>
+            <li>Subjects</li>
+            <li>Analytics</li>
+            <li onclick="logout()">Logout</li>
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <h1>Welcome, <span id="facultyName">Faculty</span> 👨‍🏫</h1>
+
+        <!-- Filters: Semester / Group / Subject -->
+        <div class="filters">
+            <select id="semesterSelect" onchange="updateData()">
+                <option value="">Select Semester</option>
+            </select>
+
+            <select id="groupSelect" onchange="updateData()">
+                <option value="">Select Group</option>
+            </select>
+
+            <select id="subjectSelect" onchange="updateData()">
+                <option value="">Select Subject</option>
+            </select>
+
+            <button id="activateBtn">Activate Attendance ✅</button>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-container">
+            <div class="chart-section">
+                <canvas id="attendanceChart"></canvas>
+            </div>
+
+            <div class="stat-card">
+                <h3>Total Students</h3>
+                <p id="totalStudents">0</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Avg Attendance</h3>
+                <p id="avgAttendance">0%</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Lowest Attendance</h3>
+                <p id="lowestAttendance">0%</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Classes Conducted</h3>
+                <p id="classesConducted">0</p>
+            </div>
+        </div>
+
+        <!-- Students Table -->
+        <div class="table-section">
+            <h2 id="tableHeader">Select Semester & Group</h2>
+            <input type="text" placeholder="Search Student..." onkeyup="searchStudent(this.value)">
+            <table id="attendanceTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Reg No</th>
+                        <th>Attended</th>
+                        <th>Total</th>
+                        <th>%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Student rows dynamically added here -->
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<script src="script.js"></script>
+<script>
+// ===== Faculty Dashboard JS =====
+
+// Example: Backend-ready data fetch
+async function fetchFacultyData() {
+    try {
+        const response = await fetch("https://your-backend.com/api/fetch-faculty-data");
+        const data = await response.json();
+
+        // Populate filters
+        const semesterSelect = document.getElementById("semesterSelect");
+        semesterSelect.innerHTML = `<option value="">Select Semester</option>`;
+        data.semesters.forEach(s => {
+            semesterSelect.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+        });
+
+        const groupSelect = document.getElementById("groupSelect");
+        groupSelect.innerHTML = `<option value="">Select Group</option>`;
+        data.groups.forEach(g => {
+            groupSelect.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+        });
+
+        const subjectSelect = document.getElementById("subjectSelect");
+        subjectSelect.innerHTML = `<option value="">Select Subject</option>`;
+        data.subjects.forEach(sub => {
+            subjectSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+        });
+
+        document.getElementById("facultyName").textContent = data.faculty.name;
+
+    } catch(err) {
+        console.error(err);
+        alert("Failed to load faculty data.");
+    }
+}
+
+// Call on page load
+fetchFacultyData();
+
+// ===== Update Table on Filter Change =====
+async function updateData() {
+    const semester = document.getElementById("semesterSelect").value;
+    const group = document.getElementById("groupSelect").value;
+    const subject = document.getElementById("subjectSelect").value;
+
+    if (!semester || !group || !subject) return;
+
+    try {
+        const response = await fetch("https://your-backend.com/api/fetch-students", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ semester, group, subject })
+        });
+
+        const data = await response.json();
+
+        const tableBody = document.querySelector("#attendanceTable tbody");
+        tableBody.innerHTML = "";
+
+        data.students.forEach(s => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${s.name}</td>
+                <td>${s.regNo}</td>
+                <td>${s.attended}</td>
+                <td>${s.total}</td>
+                <td>
+                    <div class="progress-bar">
+                        <div class="progress" style="width:${s.attendancePercent}%;">${s.attendancePercent}%</div>
+                    </div>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+
+        document.getElementById("tableHeader").textContent =
+            `${semester} - ${group} - ${subject}`;
+
+        // Update Stats
+        document.getElementById("totalStudents").textContent = data.stats.totalStudents;
+        document.getElementById("avgAttendance").textContent = data.stats.avgAttendance + "%";
+        document.getElementById("lowestAttendance").textContent = data.stats.lowestAttendance + "%";
+        document.getElementById("classesConducted").textContent = data.stats.classesConducted;
+
+        renderChart(data.students);
+
+    } catch(err) {
+        console.error(err);
+        alert("Failed to load students data.");
+    }
+}
+
+// ===== Chart Rendering =====
+let attendanceChartInstance = null;
+function renderChart(students) {
+    const ctx = document.getElementById('attendanceChart');
+    const labels = students.map(s => s.name);
+    const values = students.map(s => s.attendancePercent);
+
+    if (attendanceChartInstance) {
+        attendanceChartInstance.data.labels = labels;
+        attendanceChartInstance.data.datasets[0].data = values;
+        attendanceChartInstance.update();
+    } else {
+        attendanceChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Attendance %',
+                    data: values,
+                    backgroundColor: labels.map(() => '#6366F1'),
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                plugins: { legend: { labels: { color: "#F1F5F9" } } },
+                scales: {
+                    x: { ticks: { color: "#F1F5F9" } },
+                    y: { ticks: { color: "#F1F5F9" } }
+                }
+            }
+        });
+    }
+}
+
+// ===== Activate Attendance =====
+document.getElementById("activateBtn").addEventListener("click", async () => {
+    const semester = document.getElementById("semesterSelect").value;
+    const group = document.getElementById("groupSelect").value;
+    const subject = document.getElementById("subjectSelect").value;
+
+    if (!semester || !group || !subject) {
+        alert("Please select Semester, Group, and Subject.");
+        return;
+    }
+
+    try {
+        const response = await fetch("https://your-backend.com/api/activate-attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ semester, group, subject })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            alert("Attendance activated! Students dashboard will auto-update.");
+        } else {
+            alert("Failed to activate attendance.");
+        }
+
+    } catch(err) {
+        console.error(err);
+        alert("Server error while activating attendance.");
+    }
+});
+
+// ===== Search Student =====
+function searchStudent(value) {
+    const filter = value.toUpperCase();
+    const table = document.getElementById("attendanceTable");
+    const tr = table.getElementsByTagName("tr");
+
+    for (let i = 1; i < tr.length; i++) {
+        const td = tr[i].getElementsByTagName("td")[0];
+        if (td) {
+            const txtValue = td.textContent || td.innerText;
+            tr[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+        }
+    }
+}
+
+// ===== Logout =====
+function logout() {
+    window.location.href = "index.html";
+}
+</script>
+
+</body>
+</html>
