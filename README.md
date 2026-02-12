@@ -110,6 +110,7 @@ Start Class → Scan Faces → End Class → View Dashboard
 ### 1️⃣ Start Backend Server
 
 ```bash
+cd "SmartAttend AI 1"
 python -m smart_attendance_system.app
 ```
 
